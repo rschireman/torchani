@@ -1,5 +1,6 @@
+from unicodedata import decimal
 import torch
-
+import numpy as np
 from torch import Tensor
 import math
 from typing import Tuple, Optional, NamedTuple
@@ -108,30 +109,60 @@ def compute_shifts(cell: Tensor, pbc: Tensor, cutoff: float) -> Tensor:
         :class:`torch.Tensor`: long tensor of shifts. the center cell and
             symmetric cells are not included.
     """
-    reciprocal_cell = cell.inverse().t()
+    # print(cell.shape)
+    reciprocal_cell = cell.inverse()
+    reciprocal_cell = torch.transpose(reciprocal_cell,1,2)
     inv_distances = reciprocal_cell.norm(2, -1)
     num_repeats = torch.ceil(cutoff * inv_distances).to(torch.long)
     num_repeats = torch.where(pbc, num_repeats, num_repeats.new_zeros(()))
-    r1 = torch.arange(1, num_repeats[0].item() + 1, device=cell.device)
-    r2 = torch.arange(1, num_repeats[1].item() + 1, device=cell.device)
-    r3 = torch.arange(1, num_repeats[2].item() + 1, device=cell.device)
-    o = torch.zeros(1, dtype=torch.long, device=cell.device)
-    return torch.cat([
-        torch.cartesian_prod(r1, r2, r3),
-        torch.cartesian_prod(r1, r2, o),
-        torch.cartesian_prod(r1, r2, -r3),
-        torch.cartesian_prod(r1, o, r3),
-        torch.cartesian_prod(r1, o, o),
-        torch.cartesian_prod(r1, o, -r3),
-        torch.cartesian_prod(r1, -r2, r3),
-        torch.cartesian_prod(r1, -r2, o),
-        torch.cartesian_prod(r1, -r2, -r3),
-        torch.cartesian_prod(o, r2, r3),
-        torch.cartesian_prod(o, r2, o),
-        torch.cartesian_prod(o, r2, -r3),
-        torch.cartesian_prod(o, o, r3),
-    ])
+   
+    print("num_repeats: ", num_repeats.shape)
+    num_repeats_list = []
+    for repeat in num_repeats:
+        r1 = torch.arange(1, repeat[0].item() + 1, device=cell.device)
+        r2 = torch.arange(1, repeat[1].item() + 1, device=cell.device)
+        r3 = torch.arange(1, repeat[2].item() + 1, device=cell.device)
+        o = torch.zeros(1, dtype=torch.long, device=cell.device)
+        x =  torch.cat([
+            torch.cartesian_prod(r1, r2, r3),
+            torch.cartesian_prod(r1, r2, o),
+            torch.cartesian_prod(r1, r2, -r3),
+            torch.cartesian_prod(r1, o, r3),
+            torch.cartesian_prod(r1, o, o),
+            torch.cartesian_prod(r1, o, -r3),
+            torch.cartesian_prod(r1, -r2, r3),
+            torch.cartesian_prod(r1, -r2, o),
+            torch.cartesian_prod(r1, -r2, -r3),
+            torch.cartesian_prod(o, r2, r3),
+            torch.cartesian_prod(o, r2, o),
+            torch.cartesian_prod(o, r2, -r3),
+            torch.cartesian_prod(o, o, r3),
+        ])
+        print("x shape: ", x.shape)
+        num_repeats_list.append(x)
 
+    padding_element = [0,0,0]
+    max_len = max([len(i) for i in num_repeats_list])
+    # print(max_len)
+
+    # pad all tensors to have same length
+    padded_target = []
+    for i,x in enumerate(num_repeats_list):
+        target = x.tolist()
+        if len(target) != max_len:
+            target_index = i
+            while len(target) <= max_len-1:
+                target.append(padding_element)
+            padded_target.append(target)
+            num_repeats_list[target_index] = torch.tensor(padded_target)[0].to(device=cell.device)
+    # print(num_repeats_list)    
+    for item in num_repeats_list:
+        print(item.shape)
+    print(num_repeats_list)
+    z = torch.stack(num_repeats_list)
+    # print(data)
+    print(z.shape)
+    return z
 
 def neighbor_pairs(padding_mask: Tensor, coordinates: Tensor, cell: Tensor,
                    shifts: Tensor, cutoff: float) -> Tuple[Tensor, Tensor]:
@@ -409,11 +440,13 @@ class AEVComputer(torch.nn.Module):
         # Set up default cell and compute default shifts.
         # These values are used when cell and pbc switch are not given.
         cutoff = max(self.Rcr, self.Rca)
-        default_cell = torch.eye(3, dtype=self.EtaR.dtype, device=self.EtaR.device)
-        default_pbc = torch.zeros(3, dtype=torch.bool, device=self.EtaR.device)
-        default_shifts = compute_shifts(default_cell, default_pbc, cutoff)
-        self.register_buffer('default_cell', default_cell)
-        self.register_buffer('default_shifts', default_shifts)
+        # default_cell = torch.eye(3, dtype=self.EtaR.dtype, device=self.EtaR.device)
+        # # add placeholder for batch size dimension in cell
+        # default_cell = default_cell.unsqueeze(0)
+        # default_pbc = torch.zeros(3, dtype=torch.bool, device=self.EtaR.device)
+        # default_shifts = compute_shifts(default_cell, default_pbc, cutoff)
+        # self.register_buffer('default_cell', default_cell)
+        # self.register_buffer('default_shifts', default_shifts)
 
         # Should create only when use_cuda_extension is True.
         # However jit needs to know cuaev_computer's Type even when use_cuda_extension is False, because it is enabled when cuaev is available
@@ -529,6 +562,9 @@ class AEVComputer(torch.nn.Module):
         else:
             assert (cell is not None and pbc is not None)
             cutoff = max(self.Rcr, self.Rca)
+            print("Cells in forward pass:", cell.shape)
+            # print(species.shape)
+            # for i in cell:
             shifts = compute_shifts(cell, pbc, cutoff)
             aev = compute_aev(species, coordinates, self.triu_index, self.constants(), self.sizes, (cell, shifts))
 

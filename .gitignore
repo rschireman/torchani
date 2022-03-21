@@ -45,3 +45,6 @@ htmlcov/
 /include
 training_outputs/
 examples/dataset.pkl
+examples/run/*
+runs/*
+examples/*.h5
