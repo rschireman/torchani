@@ -116,7 +116,7 @@ def compute_shifts(cell: Tensor, pbc: Tensor, cutoff: float) -> Tensor:
     num_repeats = torch.ceil(cutoff * inv_distances).to(torch.long)
     num_repeats = torch.where(pbc, num_repeats, num_repeats.new_zeros(()))
    
-    print("num_repeats: ", num_repeats.shape)
+    # print("num_repeats: ", num_repeats.shape)
     num_repeats_list = []
     for repeat in num_repeats:
         r1 = torch.arange(1, repeat[0].item() + 1, device=cell.device)
@@ -138,7 +138,7 @@ def compute_shifts(cell: Tensor, pbc: Tensor, cutoff: float) -> Tensor:
             torch.cartesian_prod(o, r2, -r3),
             torch.cartesian_prod(o, o, r3),
         ])
-        print("x shape: ", x.shape)
+        # print("x shape: ", x.shape)
         num_repeats_list.append(x)
 
     padding_element = [0,0,0]
@@ -155,13 +155,11 @@ def compute_shifts(cell: Tensor, pbc: Tensor, cutoff: float) -> Tensor:
                 target.append(padding_element)
             padded_target.append(target)
             num_repeats_list[target_index] = torch.tensor(padded_target)[0].to(device=cell.device)
-    # print(num_repeats_list)    
-    for item in num_repeats_list:
-        print(item.shape)
-    print(num_repeats_list)
+   
+    
     z = torch.stack(num_repeats_list)
     # print(data)
-    print(z.shape)
+    # print(z.shape)
     return z
 
 def neighbor_pairs(padding_mask: Tensor, coordinates: Tensor, cell: Tensor,
@@ -183,28 +181,37 @@ def neighbor_pairs(padding_mask: Tensor, coordinates: Tensor, cell: Tensor,
     num_atoms = padding_mask.shape[1]
     num_mols = padding_mask.shape[0]
     all_atoms = torch.arange(num_atoms, device=cell.device)
-
+    # print(num_atoms, num_mols, all_atoms)
+    # print("shifts: ",shifts.shape)
     # Step 2: center cell
     # torch.triu_indices is faster than combinations
     p12_center = torch.triu_indices(num_atoms, num_atoms, 1, device=cell.device)
+    # print("p12_center: ", p12_center.shape)
     shifts_center = shifts.new_zeros((p12_center.shape[1], 3))
 
     # Step 3: cells with shifts
     # shape convention (shift index, molecule index, atom index, 3)
-    num_shifts = shifts.shape[0]
+    num_shifts = shifts.shape[1]
+    # print("num_shifts: ", num_shifts)
     all_shifts = torch.arange(num_shifts, device=cell.device)
     prod = torch.cartesian_prod(all_shifts, all_atoms, all_atoms).t()
+    # print("prod: ", prod.shape)
     shift_index = prod[0]
+    
     p12 = prod[1:]
-    shifts_outside = shifts.index_select(0, shift_index)
-
+    shifts_outside = shifts.index_select(1, shift_index)
+    # shifts_outside = shifts_outside.reshape(shifts_outside.shape[0]*shifts_outside.shape[1],3)
+    # print("Shifts center: ", shifts_center.shape)
+    # print("Shifts outside: ", shifts_outside.shape)
     # Step 4: combine results for all cells
-    shifts_all = torch.cat([shifts_center, shifts_outside])
+    shifts_all = torch.cat([shifts_center, shifts_outside[0]])
+    # print("shifts all: ", shifts_all.shape)
     p12_all = torch.cat([p12_center, p12], dim=1)
     shift_values = shifts_all.to(cell.dtype) @ cell
-
+    # print("shift_values ", shift_values.shape)
     # step 5, compute distances, and find all pairs within cutoff
     selected_coordinates = coordinates.index_select(1, p12_all.view(-1)).view(num_mols, 2, -1, 3)
+    # print("selected coords: ", selected_coordinates.shape)
     distances = (selected_coordinates[:, 0, ...] - selected_coordinates[:, 1, ...] + shift_values).norm(2, -1)
     in_cutoff = (distances <= cutoff).nonzero()
     molecule_index, pair_index = in_cutoff.unbind(1)
@@ -271,11 +278,12 @@ def triple_by_molecule(atom_index12: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
     """
     # convert representation from pair to central-others
     ai1 = atom_index12.view(-1)
+    # print("ai1: " ,ai1.shape)
     sorted_ai1, rev_indices = ai1.sort()
 
     # sort and compute unique key
     uniqued_central_atom_index, counts = torch.unique_consecutive(sorted_ai1, return_inverse=False, return_counts=True)
-
+    # print("uniqued_central_atom_index, counts", uniqued_central_atom_index, counts)
     # compute central_atom_index
     pair_sizes = counts * (counts - 1) // 2
     pair_indices = torch.repeat_interleave(pair_sizes)
@@ -317,14 +325,16 @@ def compute_aev(species: Tensor, coordinates: Tensor, triu_index: Tensor,
     else:
         cell, shifts = cell_shifts
         atom_index12, shifts = neighbor_pairs(species == -1, coordinates_, cell, shifts, Rcr)
+        # print("atom_index_12, shifts: ", atom_index12.shape, shifts.shape)
         shift_values = shifts.to(cell.dtype) @ cell
         selected_coordinates = coordinates.index_select(0, atom_index12.view(-1)).view(2, -1, 3)
         vec = selected_coordinates[0] - selected_coordinates[1] + shift_values
+        # print("vec", vec.shape)
 
     species = species.flatten()
     species12 = species[atom_index12]
 
-    distances = vec.norm(2, -1)
+    distances = vec[0].norm(2, -1)
 
     # compute radial aev
     radial_terms_ = radial_terms(Rcr, EtaR, ShfR, distances)
@@ -333,13 +343,15 @@ def compute_aev(species: Tensor, coordinates: Tensor, triu_index: Tensor,
     radial_aev.index_add_(0, index12[0], radial_terms_)
     radial_aev.index_add_(0, index12[1], radial_terms_)
     radial_aev = radial_aev.reshape(num_molecules, num_atoms, radial_length)
-
+    # print("radial aev: ", radial_aev.shape)
     # Rca is usually much smaller than Rcr, using neighbor list with cutoff=Rcr is a waste of resources
     # Now we will get a smaller neighbor list that only cares about atoms with distances <= Rca
     even_closer_indices = (distances <= Rca).nonzero().flatten()
+    # print("even_closer indices: ", even_closer_indices )
     atom_index12 = atom_index12.index_select(1, even_closer_indices)
     species12 = species12.index_select(1, even_closer_indices)
-    vec = vec.index_select(0, even_closer_indices)
+    vec = vec[0].index_select(0, even_closer_indices)
+    # print("vec", vec)
 
     # compute angular aev
     central_atom_index, pair_index12, sign12 = triple_by_molecule(atom_index12)
@@ -562,9 +574,6 @@ class AEVComputer(torch.nn.Module):
         else:
             assert (cell is not None and pbc is not None)
             cutoff = max(self.Rcr, self.Rca)
-            print("Cells in forward pass:", cell.shape)
-            # print(species.shape)
-            # for i in cell:
             shifts = compute_shifts(cell, pbc, cutoff)
             aev = compute_aev(species, coordinates, self.triu_index, self.constants(), self.sizes, (cell, shifts))
 

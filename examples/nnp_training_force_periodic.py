@@ -51,7 +51,7 @@ except NameError:
     path = os.getcwd()
 dspath = os.path.join(path, 'BTBT.h5')
 
-batch_size = 2
+batch_size = 1
 
 training, validation = torchani.data.load(
     dspath,
