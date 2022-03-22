@@ -40,6 +40,8 @@ ShfZ = torch.tensor([1.9634954e-01, 5.8904862e-01, 9.8174770e-01, 1.3744468e+00,
 EtaA = torch.tensor([8.0000000e+00], device=device)
 ShfA = torch.tensor([9.0000000e-01, 1.5500000e+00, 2.2000000e+00, 2.8500000e+00], device=device)
 
+
+
 species_order = ['H',"C","S"]
 
 num_species = len(species_order)
@@ -228,19 +230,20 @@ mse = torch.nn.MSELoss(reduction='none')
 print("training starting from epoch", AdamW_scheduler.last_epoch + 1)
 # We only train 3 epoches here in able to generate the docs quickly.
 # Real training should take much more than 3 epoches.
-max_epochs = 10
+max_epochs = 3000
 early_stopping_learning_rate = 1.0E-5
 force_coefficient = 0.1  # controls the importance of energy loss vs force loss
 # force_coefficient = 0.9
 best_model_checkpoint = 'force-training-best.pt'
+#
+#prof = torch.profiler.profile(
+#        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+#        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=0),
+#        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/'),
+#        record_shapes=True,
+#        with_stack=True)
 
-prof = torch.profiler.profile(
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/'),
-        record_shapes=True,
-        with_stack=True)
 
-prof.start()
 for _ in range(AdamW_scheduler.last_epoch + 1, max_epochs):
     rmse = validate()
     # print(torch.cuda.memory_summary(device=device, abbreviated=False))
@@ -276,7 +279,7 @@ for _ in range(AdamW_scheduler.last_epoch + 1, max_epochs):
         true_forces = properties['forces'].to(device).float()
         num_atoms = (species >= 0).sum(dim=1, dtype=true_energies.dtype)
         _, predicted_energies = model((species, coordinates),cell=cell, pbc=pbc)
-       
+        
         # We can use torch.autograd.grad to compute force. Remember to
         # create graph so that the loss of the force can contribute to
         # the gradient of parameters, and also to retain graph so that
@@ -296,9 +299,8 @@ for _ in range(AdamW_scheduler.last_epoch + 1, max_epochs):
         SGD.step()
 
         # write current batch loss to TensorBoard
-        # tensorboard.add_scalar('batch_loss', loss, AdamW_scheduler.last_epoch * len(training) + i)
-    prof.step()
-
+        tensorboard.add_scalar('batch_loss', loss, AdamW_scheduler.last_epoch * len(training) + i)
+    
     torch.save({
         'nn': nn.state_dict(),
         'AdamW': AdamW.state_dict(),
@@ -306,4 +308,4 @@ for _ in range(AdamW_scheduler.last_epoch + 1, max_epochs):
         'AdamW_scheduler': AdamW_scheduler.state_dict(),
         'SGD_scheduler': SGD_scheduler.state_dict(),
     }, latest_checkpoint)
-prof.stop()
+   
