@@ -14,7 +14,9 @@ that script to train to force.
 # Most part of the script are the same as :ref:`training-example`, we will omit
 # the comments for these parts. Please refer to :ref:`training-example` for more
 # information
-
+import torchvision.datasets
+import torchvision.models
+import torchvision.transforms as T
 import torch
 import torchani
 import os
@@ -23,7 +25,7 @@ import torch.utils.tensorboard
 import torchani.data
 import tqdm
 import ase.io
-
+torch.cuda.empty_cache()
 # helper function to convert energy unit from Hartree to kcal/mol
 from torchani.units import hartree2kcalmol
 
@@ -52,6 +54,8 @@ except NameError:
 dspath = os.path.join(path, 'BTBT.h5')
 
 batch_size = 1
+
+
 
 training, validation = torchani.data.load(
     dspath,
@@ -202,9 +206,12 @@ def validate():
             coordinates = properties['coordinates'].to(device).float()
             true_energies = properties['energies'].to(device).float()
             cell = properties['cell'].to(device).float()
+            # print(torch.cuda.memory_summary(device=device, abbreviated=True))
             _, predicted_energies = model((species, coordinates), cell=cell,pbc=pbc)
+            # _, predicted_energies = model((species, coordinates))
             total_mse += mse_sum(predicted_energies, true_energies).item()
             count += predicted_energies.shape[0]
+            
     model.train(True)
     #return math.sqrt(total_mse / count)
     return hartree2kcalmol(math.sqrt(total_mse / count))
@@ -221,14 +228,22 @@ mse = torch.nn.MSELoss(reduction='none')
 print("training starting from epoch", AdamW_scheduler.last_epoch + 1)
 # We only train 3 epoches here in able to generate the docs quickly.
 # Real training should take much more than 3 epoches.
-max_epochs = 200
+max_epochs = 10
 early_stopping_learning_rate = 1.0E-5
 force_coefficient = 0.1  # controls the importance of energy loss vs force loss
 # force_coefficient = 0.9
 best_model_checkpoint = 'force-training-best.pt'
 
+prof = torch.profiler.profile(
+        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/'),
+        record_shapes=True,
+        with_stack=True)
+
+prof.start()
 for _ in range(AdamW_scheduler.last_epoch + 1, max_epochs):
     rmse = validate()
+    # print(torch.cuda.memory_summary(device=device, abbreviated=False))
     print('RMSE:', rmse, 'at epoch', AdamW_scheduler.last_epoch + 1)
 
     learning_rate = AdamW.param_groups[0]['lr']
@@ -281,7 +296,8 @@ for _ in range(AdamW_scheduler.last_epoch + 1, max_epochs):
         SGD.step()
 
         # write current batch loss to TensorBoard
-        tensorboard.add_scalar('batch_loss', loss, AdamW_scheduler.last_epoch * len(training) + i)
+        # tensorboard.add_scalar('batch_loss', loss, AdamW_scheduler.last_epoch * len(training) + i)
+    prof.step()
 
     torch.save({
         'nn': nn.state_dict(),
@@ -290,3 +306,4 @@ for _ in range(AdamW_scheduler.last_epoch + 1, max_epochs):
         'AdamW_scheduler': AdamW_scheduler.state_dict(),
         'SGD_scheduler': SGD_scheduler.state_dict(),
     }, latest_checkpoint)
+prof.stop()

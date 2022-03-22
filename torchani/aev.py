@@ -156,10 +156,7 @@ def compute_shifts(cell: Tensor, pbc: Tensor, cutoff: float) -> Tensor:
             padded_target.append(target)
             num_repeats_list[target_index] = torch.tensor(padded_target)[0].to(device=cell.device)
    
-    
     z = torch.stack(num_repeats_list)
-    # print(data)
-    # print(z.shape)
     return z
 
 def neighbor_pairs(padding_mask: Tensor, coordinates: Tensor, cell: Tensor,
