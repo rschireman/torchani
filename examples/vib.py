@@ -83,7 +83,7 @@ ase_calc = torchani.ase.Calculator(model=model, species=species_order)
 molecule.calc = ase_calc
 
 opt = ase.optimize.BFGS(molecule)
-opt.run()
+opt.run(1e-4)
 ase.io.write('opt.pdb',molecule)
 
 vib = ase.vibrations.Vibrations(molecule)
@@ -115,6 +115,8 @@ print(masses)
 # energies from species and coordinates. The code to generate a graph of energy
 # is the same as the code to compute energy:
 cell = torch.tensor(molecule.get_cell()).float()
+# cell = cell.unsqueeze(0)
+print("cell in script: ", cell.shape)
 pbc = torch.tensor([True,True,True])
 
 # species = torch.tensor([[2,	1,	1,	0,	1,	0,	1,	0,	1,	0,	1,	1,	2,	1,	1,	0,	1,	0,	1,	0,	1,	1,	1,	0]],device=device,dtype=torch.long)

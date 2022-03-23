@@ -52,6 +52,7 @@ class Calculator(ase.calculators.calculator.Calculator):
         super().calculate(atoms, properties, system_changes)
         cell = torch.tensor(self.atoms.get_cell(complete=True),
                             dtype=self.dtype, device=self.device)
+        cell = cell.unsqueeze(0)
         pbc = torch.tensor(self.atoms.get_pbc(), dtype=torch.bool,
                            device=self.device)
         pbc_enabled = pbc.any().item()

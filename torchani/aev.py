@@ -109,13 +109,15 @@ def compute_shifts(cell: Tensor, pbc: Tensor, cutoff: float) -> Tensor:
         :class:`torch.Tensor`: long tensor of shifts. the center cell and
             symmetric cells are not included.
     """
-    # print(cell.shape)
+  
+
+    
     reciprocal_cell = cell.inverse()
     reciprocal_cell = torch.transpose(reciprocal_cell,1,2)
     inv_distances = reciprocal_cell.norm(2, -1)
     num_repeats = torch.ceil(cutoff * inv_distances).to(torch.long)
     num_repeats = torch.where(pbc, num_repeats, num_repeats.new_zeros(()))
-   
+
     # print("num_repeats: ", num_repeats.shape)
     num_repeats_list = []
     for repeat in num_repeats:
@@ -155,7 +157,7 @@ def compute_shifts(cell: Tensor, pbc: Tensor, cutoff: float) -> Tensor:
                 target.append(padding_element)
             padded_target.append(target)
             num_repeats_list[target_index] = torch.tensor(padded_target)[0].to(device=cell.device)
-   
+
     z = torch.stack(num_repeats_list)
     return z
 
