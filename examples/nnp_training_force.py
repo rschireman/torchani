@@ -45,19 +45,19 @@ try:
     path = os.path.dirname(os.path.realpath(__file__))
 except NameError:
     path = os.getcwd()
-dspath = os.path.join(path, '../dataset/ani-1x/sample.h5')
+dspath = os.path.join(path, '..\\download\\dataset\\ani-1x\\sample.h5')
 
 batch_size = 2560
 
 training, validation = torchani.data.load(
     dspath,
     additional_properties=('forces',)
-).subtract_self_energies(energy_shifter, species_order).species_to_indices(species_order).shuffle().split(0.8, None)
+).species_to_indices(species_order).shuffle().split(0.8, None)
 
 training = training.collate(batch_size).cache()
 validation = validation.collate(batch_size).cache()
 
-print('Self atomic energies: ', energy_shifter.self_energies)
+
 
 ###############################################################################
 # The code to define networks, optimizers, are mostly the same
@@ -232,8 +232,8 @@ mse = torch.nn.MSELoss(reduction='none')
 print("training starting from epoch", AdamW_scheduler.last_epoch + 1)
 # We only train 3 epoches here in able to generate the docs quickly.
 # Real training should take much more than 3 epoches.
-max_epochs = 3
-early_stopping_learning_rate = 1.0E-5
+max_epochs = 3000
+early_stopping_learning_rate = 1.0E-8
 force_coefficient = 0.1  # controls the importance of energy loss vs force loss
 best_model_checkpoint = 'force-training-best.pt'
 
