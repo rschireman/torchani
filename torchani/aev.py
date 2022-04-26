@@ -6,7 +6,6 @@ from typing import Tuple, Optional, NamedTuple
 import sys
 import warnings
 import importlib_metadata
-from .pca import PCA
 
 has_cuaev = 'torchani.cuaev' in importlib_metadata.metadata(__package__).get_all('Provides')
 
@@ -530,6 +529,10 @@ class AEVComputer(torch.nn.Module):
             x = aev
             m = x.mean(2, keepdim=True)
             s = x.std(2, unbiased=False, keepdim=True)
+            """
+            x = x + 1 is not in-place, because it takes the objects pointed to by x, creates a new Variable, adds 1 to x putting the result in the new Variable, and overwrites the object referenced by x to point to the new var. There are no in-place modifications, you only change Python references (you can check that id(x) is different before and after that line).
+            On the other hand, doing x += 1 or x[0] = 1 will modify the data of the Variable in-place, so that no copy is done. However some functions (in your case *) require the inputs to never change after they compute the output, or they wouldn’t be able to compute the gradient. That’s why an error is raised.
+            """
             x = x - m
             x = x / s
 

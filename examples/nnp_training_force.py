@@ -38,8 +38,6 @@ ShfA = torch.tensor([9.0000000e-01, 1.5500000e+00, 2.2000000e+00, 2.8500000e+00]
 species_order = ['H', 'C', 'N', 'O']
 num_species = len(species_order)
 aev_computer = torchani.AEVComputer(Rcr, Rca, EtaR, ShfR, EtaA, Zeta, ShfA, ShfZ, num_species)
-energy_shifter = torchani.utils.EnergyShifter(None)
-
 
 try:
     path = os.path.dirname(os.path.realpath(__file__))
@@ -156,7 +154,8 @@ AdamW = torch.optim.AdamW([
     {'params': [O_network[2].weight], 'weight_decay': 0.00001},
     {'params': [O_network[4].weight], 'weight_decay': 0.000001},
     {'params': [O_network[6].weight]},
-])
+    
+], lr=1e-4)
 
 SGD = torch.optim.SGD([
     # H networks
@@ -179,7 +178,7 @@ SGD = torch.optim.SGD([
     {'params': [O_network[2].bias]},
     {'params': [O_network[4].bias]},
     {'params': [O_network[6].bias]},
-], lr=1e-3)
+], lr=1e-4)
 
 AdamW_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(AdamW, factor=0.5, patience=100, threshold=0)
 SGD_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(SGD, factor=0.5, patience=100, threshold=0)
