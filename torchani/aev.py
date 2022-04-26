@@ -1,11 +1,12 @@
 import torch
-
+import numpy as np
 from torch import Tensor
 import math
 from typing import Tuple, Optional, NamedTuple
 import sys
 import warnings
 import importlib_metadata
+from .pca import PCA
 
 has_cuaev = 'torchani.cuaev' in importlib_metadata.metadata(__package__).get_all('Provides')
 
@@ -526,10 +527,16 @@ class AEVComputer(torch.nn.Module):
 
         if cell is None and pbc is None:
             aev = compute_aev(species, coordinates, self.triu_index, self.constants(), self.sizes, None)
+            x = aev
+            m = x.mean(2, keepdim=True)
+            s = x.std(2, unbiased=False, keepdim=True)
+            x = x - m
+            x = x / s
+
         else:
             assert (cell is not None and pbc is not None)
             cutoff = max(self.Rcr, self.Rca)
             shifts = compute_shifts(cell, pbc, cutoff)
             aev = compute_aev(species, coordinates, self.triu_index, self.constants(), self.sizes, (cell, shifts))
 
-        return SpeciesAEV(species, aev)
+        return SpeciesAEV(species, x)
