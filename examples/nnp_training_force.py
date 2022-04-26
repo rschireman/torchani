@@ -45,7 +45,7 @@ except NameError:
     path = os.getcwd()
 dspath = os.path.join(path, '..\\download\\dataset\\ani-1x\\sample.h5')
 
-batch_size = 2560
+batch_size = 256
 
 training, validation = torchani.data.load(
     dspath,
@@ -155,7 +155,7 @@ AdamW = torch.optim.AdamW([
     {'params': [O_network[4].weight], 'weight_decay': 0.000001},
     {'params': [O_network[6].weight]},
     
-], lr=1e-4)
+], lr=1e-5)
 
 SGD = torch.optim.SGD([
     # H networks
@@ -178,7 +178,7 @@ SGD = torch.optim.SGD([
     {'params': [O_network[2].bias]},
     {'params': [O_network[4].bias]},
     {'params': [O_network[6].bias]},
-], lr=1e-4)
+], lr=1e-3)
 
 AdamW_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(AdamW, factor=0.5, patience=100, threshold=0)
 SGD_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(SGD, factor=0.5, patience=100, threshold=0)
@@ -231,7 +231,7 @@ mse = torch.nn.MSELoss(reduction='none')
 print("training starting from epoch", AdamW_scheduler.last_epoch + 1)
 # We only train 3 epoches here in able to generate the docs quickly.
 # Real training should take much more than 3 epoches.
-max_epochs = 3000
+max_epochs = 5000
 early_stopping_learning_rate = 1.0E-8
 force_coefficient = 0.1  # controls the importance of energy loss vs force loss
 best_model_checkpoint = 'force-training-best.pt'
